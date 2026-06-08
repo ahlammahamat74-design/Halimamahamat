@@ -1,0 +1,203 @@
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import ttk
+import sqlite3
+
+# --- 1. مرحلة تهيئة قاعدة البيانات ---
+def init_db():
+    conn = sqlite3.connect("store.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        price REAL NOT NULL,
+        quantity INTEGER NOT NULL
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+# --- 2. دالة جلب وتحديث البيانات في الجدول ---
+def load_data():
+    for row in tree.get_children():
+        tree.delete(row)
+        
+    conn = sqlite3.connect("store.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM products")
+    rows = cursor.fetchall()
+    
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+        
+    conn.close()
+
+# --- 3. دالة إضافة منتج جديد (Create) ---
+def add_product():
+    name = entry_name.get()
+    price = entry_price.get()
+    qty = entry_qty.get()
+    
+    if name == "" or price == "" or qty == "":
+        messagebox.showwarning("خطأ في الإدخال", "الرجاء ملء جميع الحقول المطلوبة!")
+        return
+    
+    try:
+        conn = sqlite3.connect("store.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO products (name, price, quantity) VALUES (?, ?, ?)", 
+                       (name, float(price), int(qty)))
+        conn.commit()
+        conn.close()
+        
+        messagebox.showinfo("تم الحفظ", f"تمت إضافة المنتج '{name}' بنجاح!")
+        clear_fields()
+        load_data()
+        
+    except ValueError:
+        messagebox.showerror("خطأ في البيانات", "الرجاء إدخال أرقام صحيحة في حقول السعر والكمية.")
+
+# --- 4. دالة حذف المنتج المحدد (Delete) ---
+def delete_product():
+    # التحقق مما إذا كان المستخدم قد حدد صفاً من الجدول
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showwarning("تنبيه", "الرجاء اختيار منتج من الجدول أولاً لحذفه!")
+        return
+    
+    # تأكيد الحذف من المستخدم
+    confirm = messagebox.askyesno("تأكيد الحذف", "هل أنت متأكد من رغبتك في حذف هذا المنتج نهائياً؟")
+    if confirm:
+        # جلب قيم الصف المحدد، وتحديداً الرقم المعرف (ID) الموجود في العمود الأول
+        product_values = tree.item(selected_item)['values']
+        product_id = product_values[0]
+        
+        # الحذف من قاعدة البيانات
+        conn = sqlite3.connect("store.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        conn.commit()
+        conn.close()
+        
+        messagebox.showinfo("تم الحذف", "تم حذف المنتج بنجاح!")
+        clear_fields()
+        load_data()
+
+# --- 5. دالة تعديل المنتج المحدد (Update) ---
+def update_product():
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showwarning("تنبيه", "الرجاء اختيار منتج من الجدول أولاً لتعديله!")
+        return
+    
+    name = entry_name.get()
+    price = entry_price.get()
+    qty = entry_qty.get()
+    
+    if name == "" or price == "" or qty == "":
+        messagebox.showwarning("خطأ في الإدخال", "الرجاء ملء الحقول بالبيانات الجديدة قبل التعديل!")
+        return
+    
+    try:
+        product_values = tree.item(selected_item)['values']
+        product_id = product_values[0]
+        
+        # تحديث البيانات في قاعدة البيانات بناءً على الـ ID
+        conn = sqlite3.connect("store.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE products SET name = ?, price = ?, quantity = ? WHERE id = ?", 
+                       (name, float(price), int(qty), product_id))
+        conn.commit()
+        conn.close()
+        
+        messagebox.showinfo("تم التعديل", "تم تحديث بيانات المنتج بنجاح!")
+        clear_fields()
+        load_data()
+        
+    except ValueError:
+        messagebox.showerror("خطأ في البيانات", "الرجاء إدخال أرقام صحيحة في حقول السعر والكمية.")
+
+# --- دالة مساعدة لتعبئة الحقول عند الضغط على أي صف في الجدول ---
+def on_item_select(event):
+    selected_item = tree.selection()
+    if selected_item:
+        product_values = tree.item(selected_item)['values']
+        # تفريغ الحقول أولاً ثم تعبئتها ببيانات الصف المختار
+        clear_fields()
+        entry_name.insert(0, product_values[1])
+        entry_price.insert(0, product_values[2])
+        entry_qty.insert(0, product_values[3])
+
+# دالة لتنظيف الحقول النصية
+def clear_fields():
+    entry_name.delete(0, tk.END)
+    entry_price.delete(0, tk.END)
+    entry_qty.delete(0, tk.END)
+
+
+# تشغيل قاعدة البيانات
+init_db()
+
+# --- 6. إعداد الواجهة الرسومية المحترفة ---
+root = tk.Tk()
+root.title("النظام المتكامل لإدارة المخازن والمبيعات")
+root.geometry("550x600")
+root.resizable(False, False)
+
+# العنوان الرئيسي
+label_title = tk.Label(root, text="نظام إدارة المستودعات والمنتجات", font=("Arial", 16, "bold"), fg="#2C3E50")
+label_title.pack(pady=15)
+
+# إطار حقول الإدخال
+frame_inputs = tk.Frame(root)
+frame_inputs.pack(pady=10)
+
+tk.Label(frame_inputs, text="اسم المنتج:", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=5, sticky="e")
+entry_name = tk.Entry(frame_inputs, font=("Arial", 10), width=25)
+entry_name.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(frame_inputs, text="السعر (المحلي):", font=("Arial", 10, "bold")).grid(row=1, column=0, padx=5, pady=5, sticky="e")
+entry_price = tk.Entry(frame_inputs, font=("Arial", 10), width=25)
+entry_price.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Label(frame_inputs, text="الكمية المتوفرة:", font=("Arial", 10, "bold")).grid(row=2, column=0, padx=5, pady=5, sticky="e")
+entry_qty = tk.Entry(frame_inputs, font=("Arial", 10), width=25)
+entry_qty.grid(row=2, column=1, padx=5, pady=5)
+
+# إطار الأزرار (Buttons Frame) لتنظيم الأزرار الثلاثة بجانب بعضها
+frame_buttons = tk.Frame(root)
+frame_buttons.pack(pady=15)
+
+btn_save = tk.Button(frame_buttons, text="إضافة منتج", font=("Arial", 10, "bold"), bg="#2ECC71", fg="white", width=12, command=add_product)
+btn_save.grid(row=0, column=0, padx=5)
+
+btn_update = tk.Button(frame_buttons, text="تعديل المحدد", font=("Arial", 10, "bold"), bg="#3498DB", fg="white", width=12, command=update_product)
+btn_update.grid(row=0, column=1, padx=5)
+
+btn_delete = tk.Button(frame_buttons, text="حذف المحدد", font=("Arial", 10, "bold"), bg="#E74C3C", fg="white", width=12, command=delete_product)
+btn_delete.grid(row=0, column=2, padx=5)
+
+# --- 7. إعداد جدول عرض البيانات (Treeview) ---
+columns = ("id", "name", "price", "quantity")
+tree = ttk.Treeview(root, columns=columns, show="headings", height=12)
+
+tree.heading("id", text="الرقم")
+tree.heading("name", text="اسم المنتج")
+tree.heading("price", text="السعر")
+tree.heading("quantity", text="الكمية")
+
+tree.column("id", width=60, anchor="center")
+tree.column("name", width=180, anchor="center")
+tree.column("price", width=110, anchor="center")
+tree.column("quantity", width=110, anchor="center")
+
+tree.pack(pady=10, padx=20, fill="x")
+
+# ربط حدث الضغط على الصف في الجدول ليقوم بتعبئة الحقول تلقائياً
+tree.bind("<<TreeviewSelect>>", on_item_select)
+
+# تحميل البيانات عند التشغيل أول مرة
+load_data()
+
+root.mainloop()
